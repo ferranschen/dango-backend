@@ -15,6 +15,8 @@ source venv/bin/activate
 pip install openai
 pip install fastapi
 pip install uvicorn
+pip install lark
+pip install pandas
 ```
 
 ## Set the openai api key
