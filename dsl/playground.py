@@ -86,10 +86,11 @@ def execute_dsl(dsl_code):
 
 
 # Test the interpreter
-dsl_code = """
+dsl_code_1 = """
     drop(table=table1, labels=[col1, col2], axis=1)
-    drop(table=table1, labels=[col1, col2], axis=1)
-    drop(table=table1, labels=[1, 2], axis=0)
+"""
+
+dsl_code_2 = """
     drop(table=table1, labels=[1, 2], axis=0)
 """
-execute_dsl(dsl_code)
+execute_dsl(dsl_code_1)
