@@ -27,7 +27,6 @@ async def hello_world():
     json_data = {
         "message": "Hello, World!",
         "status": 200,
-        "users": [{"name": "John", "age": 30}, {"name": "Jane", "age": 25}],
     }
     return json_data
 
