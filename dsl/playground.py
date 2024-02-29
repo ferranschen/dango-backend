@@ -12,8 +12,8 @@ dsl_grammar = """
     copy: "copy(" "table=" NAME "," "column=" label "," "new_column=" label ")"
     merge: "merge(" "table=" NAME "," "column1=" label "," "column2=" label "," "glue=" STRING "," "new_column=" label ")"
     split: "split(" "table=" NAME "," "column=" label "," "delimiter=" STRING "," "new_columns=" labels ")"
-    fold: "fold(" "table=" NAME "," "after_column=" label "," "new_column=" label ")"
-    unfold: "unfold(" "table=" NAME "," "key_column=" label "," "value_column=" label ")"
+    fold: "fold(" "table=" NAME "," "column=" label ")"
+    unfold: "unfold(" "table=" NAME ")"
     fill: "fill(" "table=" NAME "," "column=" label ")"
     delete: "delete(" "table=" NAME "," "column=" label ")"
     transpose: "transpose(" "table=" NAME ")"
@@ -47,10 +47,10 @@ class DSLTransformer(Transformer):
         return {"split": {"table": args[0], "column": args[1], "delimiter": args[2], "new_columns": args[3]}}
     
     def fold(self, args):
-        return {"fold": {"table": args[0], "after_column": args[1], "new_column": args[2]}}
+        return {"fold": {"table": args[0], "column": args[1]}}
     
     def unfold(self, args):
-        return {"unfold": {"table": args[0], "key_column": args[1], "value_column": args[2]}}
+        return {"unfold": {"table": args[0]}}
     
     def fill(self, args):
         return {"fill": {"table": args[0], "column": args[1]}}
@@ -108,13 +108,10 @@ def execute_dsl(tables, dsl_code):
                 new_columns = command["split"]["new_columns"]
                 table = utils.split(table, column, delimiter, new_columns)
             elif command_type == "fold":
-                after_column = command["fold"]["after_column"].children[0]
-                new_column = command["fold"]["new_column"].children[0]
-                table = utils.fold(table, after_column, new_column)
+                column = command["fold"]["column"].children[0]
+                table = utils.fold(table, column)
             elif command_type == "unfold":
-                key_column = command["unfold"]["key_column"].children[0]
-                value_column = command["unfold"]["value_column"].children[0]
-                table = utils.unfold(table, key_column, value_column)
+                table = utils.unfold(table)
             elif command_type == "fill":
                 column = command["fill"]["column"].children[0]
                 table = utils.fill(table, column)
