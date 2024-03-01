@@ -6,7 +6,7 @@ import utils
 # LABELS menas index or column labels
 dsl_grammar = """
     start: command+
-    command: drop | move | copy | merge | split | fold | unfold | fill | delete | transpose
+    command: drop | move | copy | merge | split | fold | unfold | transpose
     drop: "drop(" "table=" NAME "," "labels=" labels "," "axis=" AXIS ")"
     move: "move(" "table=" NAME "," "column=" label "," "to=" NUMBER ")"
     copy: "copy(" "table=" NAME "," "column=" label "," "new_column=" label ")"
@@ -14,8 +14,6 @@ dsl_grammar = """
     split: "split(" "table=" NAME "," "column=" label "," "delimiter=" STRING "," "new_columns=" labels ")"
     fold: "fold(" "table=" NAME "," "column=" label ")"
     unfold: "unfold(" "table=" NAME ")"
-    fill: "fill(" "table=" NAME "," "column=" label ")"
-    delete: "delete(" "table=" NAME "," "column=" label ")"
     transpose: "transpose(" "table=" NAME ")"
 
     labels: "[" [label ("," label)*] "]"
@@ -51,12 +49,6 @@ class DSLTransformer(Transformer):
     
     def unfold(self, args):
         return {"unfold": {"table": args[0]}}
-    
-    def fill(self, args):
-        return {"fill": {"table": args[0], "column": args[1]}}
-    
-    def delete(self, args):
-        return {"delete": {"table": args[0], "column": args[1]}}
     
     def transpose(self, args):
         return {"transpose": {"table": args[0]}}
@@ -112,13 +104,6 @@ def execute_dsl(tables, dsl_code):
                 table = utils.fold(table, column)
             elif command_type == "unfold":
                 table = utils.unfold(table)
-            elif command_type == "fill":
-                column = command["fill"]["column"].children[0]
-                table = utils.fill(table, column)
-            elif command_type == "delete":
-                predicate = command["delete"]["predicate"]
-                axis = command["delete"]["axis"]
-                table = utils.delete(table, predicate, axis)
             elif command_type == "extract":
                 column_name = command["extract"]["column_name"].children[0]
                 pattern = command["extract"]["pattern"]

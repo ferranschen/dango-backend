@@ -138,31 +138,8 @@ def unfold(table):
     return unfolded_table
 
 
-def fill(table, column):
-    if column not in table.columns:
-        raise ValueError(f"Column {column} does not exist in the DataFrame")
-
-    # Fill empty cells with the value from above
-    table[column].fillna(method="ffill", inplace=True)
-
-    return table
-
-
-def delete(table, predicate, axis):
-    if axis == 0:  # Delete rows
-        # Apply the predicate across each row
-        # The predicate function should be designed to operate on row series or individual values depending on the use case
-        rows_to_delete = table.apply(lambda row: predicate(row), axis=1)
-        filtered_table = table[~rows_to_delete]
-    elif axis == 1:  # Delete columns
-        # Apply the predicate across each column
-        columns_to_delete = [col for col in table.columns if predicate(table[col])]
-        filtered_table = table.drop(columns=columns_to_delete)
-    else:
-        raise ValueError("Axis must be 0 (rows) or 1 (columns)")
-
-    return filtered_table
-
-
 def transpose(table):
-    return table.transpose()
+    print("Table before transpose:\n", table)
+    new_table = table.transpose()
+    print("Table after transpose:\n", new_table)
+    return new_table
