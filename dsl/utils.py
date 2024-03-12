@@ -1,145 +1,396 @@
 import pandas as pd
-from collections import OrderedDict
+import scipy.stats as stats
+import statsmodels.api as sm
 
 
-def drop(table, labels, axis):
-    if axis == 1 or axis == "columns":
-        if not set(labels).issubset(table.columns):
-            raise ValueError(f"Invalid column labels:{labels}")
-    if axis == 0 or axis == "index":
-        labels = [int(label) for label in labels]
-        if not set(labels).issubset(table.index):
-            raise ValueError(f"Invalid index labels:{labels}")
+def drop(table, label, axis=0):
+    """
+    Drops a row or column from the given DataFrame based on the label and axis.
 
-    print("Table before column move:\n", table)
+    Parameters:
+    - table: DataFrame from which the row/column will be dropped.
+    - label: The label of the row/column to be dropped. For rows, this is the index label; for columns, this is the column name.
+    - axis: 0 for row, 1 for column. Specifies whether to drop a row or a column.
+    """
+    # Validate axis
+    if axis not in [0, 1, "index", "columns"]:
+        raise ValueError("Axis must be 0, 'index', 1, or 'columns'")
 
-    table.drop(labels=labels, axis=axis, inplace=True)
+    # Convert string axis to numeric
+    if axis == "index":
+        axis = 0
+    elif axis == "columns":
+        axis = 1
 
-    print("Table after drop:\n", table)
+    # Dropping a column
+    if axis == 1:
+        if label not in table.columns:
+            raise ValueError(f"Column {label} does not exist in the DataFrame.")
+        table.drop(labels=label, axis=axis, inplace=True)
+
+    # Dropping a row
+    else:
+        label = int(label)
+        if label not in table.index:
+            raise ValueError(f"Row {label} does not exist in the DataFrame.")
+        table.drop(labels=label, axis=axis, inplace=True)
     return table
 
 
-def move(table, column, to):
-    if column not in table.columns:
-        raise ValueError(f"Column {column} does not exist in the DataFrame")
+def move(table, label, target_table, target_position, axis=0):
+    """
+    Moves a row or column from source_table to target_table at the specified position.
 
-    num_columns = len(table.columns)
-    if to < 0 or to >= num_columns:
-        raise ValueError(f"New position {to} is out of bounds")
+    Parameters:
+    - source_table: DataFrame from which the row/column will be moved.
+    - label: The label of the row/column to be moved.
+    - target_table: DataFrame to which the row/column will be added.
+    - position: Position at which the row/column will be inserted into the target_table.
+    - axis: 0 for row, 1 for column.
+    """
 
-    print("Table before column move:\n", table)
+    # Validate axis
+    if axis not in [0, 1, "index", "columns"]:
+        raise ValueError("Axis must be 0, 'index', 1, or 'columns'")
 
-    column_to_move = table[column]
+    # Convert string axis to numeric
+    if axis == "index":
+        axis = 0
+    elif axis == "columns":
+        axis = 1
 
-    table.drop(labels=[column], axis="columns", inplace=True)
-    table.insert(loc=to, column=column, value=column_to_move)
+    target_position = int(target_position)
 
-    print("Table after column move:\n", table)
-    return table
+    # Moving a column
+    if axis == 1:
+        if label not in table.columns:
+            raise ValueError(
+                f"Column '{label}' does not exist in the source DataFrame."
+            )
+        if target_position < 0 or target_position > len(target_table.columns):
+            raise ValueError("Position out of range in the target DataFrame.")
 
+        # Extract the column and drop it from the source
+        column_data = table.pop(label)
 
-def copy(table, column, new_column):
-    if column not in table.columns:
-        raise ValueError(f"Column {column} does not exist in the DataFrame")
-    if new_column in table.columns:
-        raise ValueError(
-            f"New column label {new_column} already exists in the DataFrame"
-        )
-    print("Table before column copy:\n", table)
-    table[new_column] = table[column].copy()
-    print("Table after column copy:\n", table)
-    return table
+        # Insert the column into the target DataFrame at the specified position
+        target_table.insert(loc=target_position, column=label, value=column_data)
 
+    # Moving a row
+    else:
+        label = int(label)
+        # Check if the row exists in the source DataFrame
+        if label not in table.index:
+            raise ValueError(f"Row '{label}' does not exist in the source DataFrame.")
 
-def merge(table, column1, column2, glue, new_column):
-    if column1 not in table.columns:
-        raise ValueError(f"Column {column1} does not exist in the DataFrame")
-    if column2 not in table.columns:
-        raise ValueError(f"Column {column2} does not exist in the DataFrame")
-    if new_column in table.columns:
-        raise ValueError(
-            f"New column label {new_column} already exists in the DataFrame"
-        )
-    print("Table before column merge:\n", table)
-    table[new_column] = table[column1].astype(str) + glue + table[column2].astype(str)
-    print("Table after column merge:\n", table)
-    return table
+        # Validate the target position
+        if target_position < 0 or target_position > len(target_table.index):
+            raise ValueError("Position out of range in the target DataFrame.")
 
+        # Extract the row to be moved
+        row_data = table.loc[[label]]
 
-def split(table, column, delimiter, new_columns):
-    if column not in table.columns:
-        raise ValueError(f"Column {column} does not exist in the DataFrame")
-    if len(new_columns) != 2:
-        raise ValueError("new_labels must contain exactly two new column names")
+        # Drop the row from the source DataFrame
+        table.drop(labels=label, axis=0, inplace=True)
 
-    print("Table before column split:\n", table)
-    table[new_columns[0]], table[new_columns[1]] = zip(
-        *table[column].str.split(delimiter, n=1).tolist()
-    )
-    print("Table after column split:\n", table)
-
-    return table
-
-
-def fold(table, column):
-    # Find the index of the column name
-    if column not in table.columns:
-        raise ValueError(f"Column {column} does not exist in the DataFrame")
-    print("Table before column split:\n", table)
-    column_index = table.columns.get_loc(column)
-
-    # Prepare an empty list to hold the new rows
-    new_rows = []
-
-    # Iterate over each row in the DataFrame
-    for _, row in table.iterrows():
-        # For each column after the specified index, create a new row
-        # with the value from the pivot column and the current column
-        for col in table.columns[column_index + 1:]:
-            new_row = [row[column], row[col]]  # Use column_name directly
-            new_rows.append(new_row)
-
-    new_table = pd.DataFrame(new_rows, columns=[column, "folded_value"])
-    print("Table after column split:\n", new_table)
-    return new_table
-
-
-def unfold(table):
-    print("Table before column split:\n", table)
-    # Create an OrderedDict to maintain the order of groups as they're encountered
-    temp = OrderedDict()
-    
-    # Iterate through the DataFrame rows
-    for index, row in table.iterrows():
-        # Use all but the last column as the key, accessing values explicitly
-        t = tuple(row.iloc[:-1])
-        # Append the last value using .iloc to access by position
-        if t in temp:
-            temp[t].append(row.iloc[-1])
+        # If the target_position is at the end, simply concatenate
+        if target_position == len(target_table.index):
+            target_table = pd.concat([target_table, row_data])
         else:
-            temp[t] = [row.iloc[-1]]
-    
-    # Determine the maximum number of columns required
-    max_col = max(len(v) for v in temp.values())
-    
-    # Prepare the unfolded DataFrame
-    unfolded_data = []
-    
-    # Populate the unfolded_data list with rows expanded according to temp
-    for key, values in temp.items():
-        row = list(key)
-        row.extend(values + [''] * (max_col - len(values)))  # Extend with values and fill the rest with blanks
-        unfolded_data.append(row)
-    
-    # Convert unfolded_data into a DataFrame
-    column_names = list(table.columns[:-1]) + [f'col_{i}' for i in range(max_col)]
-    unfolded_table = pd.DataFrame(unfolded_data, columns=column_names)
-    print("Table after column split:\n", unfolded_table)
-    return unfolded_table
+            # Split the target DataFrame at the desired position
+            top_half = target_table.iloc[:target_position]
+            bottom_half = target_table.iloc[target_position:]
+
+            # Concatenate the parts back together, inserting the row_data in between
+            target_table = pd.concat([top_half, row_data, bottom_half])
+
+            return table, target_table
+
+
+def copy(table, label, target_table, target_label, axis=0):
+    """
+    Copies a row or column from table to target_table, assigning it a new label.
+
+    Parameters:
+    - table: DataFrame from which the row/column will be copied.
+    - label: The label of the row/column to be copied.
+    - target_table: DataFrame to which the copied row/column will be added.
+    - target_label: The label for the copied row/column in the target DataFrame.
+    - axis: 0 for row, 1 for column.
+    """
+
+    # Validate axis
+    if axis not in [0, 1, "index", "columns"]:
+        raise ValueError("Axis must be 0, 'index', 1, or 'columns'")
+
+    # Convert string axis to numeric
+    if axis == "index":
+        axis = 0
+    elif axis == "columns":
+        axis = 1
+
+    # Copying a column
+    if axis == 1:
+        if label not in table.columns:
+            raise ValueError(f"Column {label} does not exist in the source DataFrame.")
+        if target_label in target_table.columns:
+            raise ValueError(
+                f"Column {target_label} already exists in the target DataFrame."
+            )
+
+        # Copy the column and add it to the target DataFrame
+        target_table[target_label] = table[label].copy()
+
+    # Copying a row
+    else:
+        if label not in table.index:
+            raise ValueError(f"Row {label} does not exist in the source DataFrame.")
+        if target_label in target_table.index:
+            raise ValueError(
+                f"Row {target_label} already exists in the target DataFrame."
+            )
+
+        # Copy the row and add it to the target DataFrame
+        target_table.loc[target_label] = table.loc[label].copy()
+
+    return target_table
+
+
+def merge(table, label_1, label_2, glue, new_label, axis=0):
+    """
+    Merges two rows or columns in a DataFrame into a new row or column, concatenating their contents with a specified glue string.
+
+    Parameters:
+    - table: DataFrame in which the rows/columns will be merged.
+    - label_1, label_2: The labels of the rows/columns to be merged.
+    - glue: String used to concatenate the contents of the rows/columns.
+    - new_label: The label for the new merged row/column.
+    - axis: 0 for merging rows, 1 for merging columns.
+    """
+
+    # Validate axis
+    if axis not in [0, 1, "index", "columns"]:
+        raise ValueError("Axis must be 0, 'index', 1, or 'columns'")
+
+    # Convert string axis to numeric
+    if axis == "index":
+        axis = 0
+    elif axis == "columns":
+        axis = 1
+
+    # Merging columns
+    if axis == 1:
+        if label_1 not in table.columns or label_2 not in table.columns:
+            raise ValueError("One or both column labels do not exist in the DataFrame.")
+        if new_label in table.columns:
+            raise ValueError(f"Column {new_label} already exists in the DataFrame.")
+
+        # Concatenate the columns with the specified glue and create a new column
+        table[new_label] = (
+            table[label_1].astype(str) + glue + table[label_2].astype(str)
+        )
+
+    # Merging rows
+    else:
+        if label_1 not in table.index or label_2 not in table.index:
+            raise ValueError("One or both row labels do not exist in the DataFrame.")
+        if new_label in table.index:
+            raise ValueError(f"Row {new_label} already exists in the DataFrame.")
+
+        # Concatenate the rows with the specified glue and create a new row
+        new_row = (
+            table.loc[label_1].astype(str) + glue + table.loc[label_2].astype(str)
+        ).rename(new_label)
+        table = table.append(new_row)
+
+    return table
+
+
+def split(table, label, delimiter, new_labels, axis=0):
+    """
+    Splits the contents of a row or column in the DataFrame into multiple new rows or columns.
+
+    Parameters:
+    - table: DataFrame in which the row/column will be split.
+    - label: The label of the row/column to be split.
+    - delimiter: The delimiter used to split the row/column content.
+    - new_labels: List of new labels for the resulting split rows/columns.
+    - axis: 0 for splitting a row, 1 for splitting a column.
+    """
+
+    # Validate axis
+    if axis not in [0, 1, "index", "columns"]:
+        raise ValueError("Axis must be 0, 'index', 1, or 'columns'")
+
+    # Convert string axis to numeric
+    if axis == "index":
+        axis = 0
+    elif axis == "columns":
+        axis = 1
+
+    # Splitting a column
+    if axis == 1:
+        if label not in table.columns:
+            raise ValueError(f"Column {label} does not exist in the DataFrame.")
+
+        # Perform the split operation and create new columns
+        split_data = table[label].str.split(delimiter, expand=True)
+        split_data.columns = new_labels
+
+        # Drop the original column and add new columns
+        table = table.drop(labels=label, axis=1)
+        table = pd.concat([table, split_data], axis=1)
+
+    # Splitting a row
+    else:
+        if label not in table.index:
+            raise ValueError(f"Row {label} does not exist in the DataFrame.")
+
+        # Perform the split operation and create new rows
+        split_data = table.loc[label].str.split(delimiter).values[0]
+        if len(split_data) != len(new_labels):
+            raise ValueError(
+                "The number of new labels must match the result of the split."
+            )
+
+        # Drop the original row and add new rows
+        table = table.drop(labels=label, axis=0)
+        for new_label, data in zip(new_labels, split_data):
+            table.loc[new_label] = data
+
+    return table
 
 
 def transpose(table):
-    print("Table before transpose:\n", table)
-    new_table = table.transpose()
-    print("Table after transpose:\n", new_table)
-    return new_table
+    """
+    Transposes the given DataFrame, swapping its rows and columns.
+
+    Parameters:
+    - table: DataFrame to be transposed.
+
+    Returns:
+    - A new DataFrame that is the transpose of the input DataFrame.
+    """
+
+    # Transpose the DataFrame
+    transposed_table = table.transpose()
+
+    return transposed_table
+
+
+def aggregate(table, label, new_label, operation, axis=0):
+    """
+    Performs a specified aggregation operation on a row or column in the DataFrame and appends the result.
+
+    Parameters:
+    - table: DataFrame on which the aggregation operation will be performed.
+    - label: The label of the row/column to be aggregated. Ignored if axis is 0 and operation is sum, mean, median, min, or max, as the aggregation will be done for all columns.
+    - new_label: The label for the resulting aggregated row/column.
+    - operation: The aggregation operation to perform ('sum', 'mean', 'median', 'min', 'max').
+    - axis: 0 to aggregate columns (resulting in a new row), 1 to aggregate rows (resulting in a new column).
+    """
+
+    # Validate axis
+    if axis not in [0, 1]:
+        raise ValueError("Axis must be 0 or 1")
+
+    # Define supported operations
+    supported_operations = {
+        "sum": lambda x: x.sum(),
+        "mean": lambda x: x.mean(),
+        "median": lambda x: x.median(),
+        "min": lambda x: x.min(),
+        "max": lambda x: x.max(),
+    }
+
+    # Check if the operation is supported
+    if operation not in supported_operations:
+        raise ValueError(
+            f"Operation '{operation}' is not supported. Supported operations are: {list(supported_operations.keys())}"
+        )
+
+    # Aggregating columns (resulting in a new row)
+    if axis == 0:
+        # Compute the aggregation for each column
+        aggregated_row = supported_operations[operation](table)
+
+        # Append the aggregated row with the specified label
+        table.loc[new_label] = aggregated_row
+
+    # Aggregating rows (resulting in a new column)
+    else:
+        if label not in table.index:
+            raise ValueError(f"Row {label} does not exist in the DataFrame.")
+
+        # Compute the aggregation for the specified row
+        aggregated_column = supported_operations[operation](table.loc[label])
+
+        # Append the aggregated column with the specified label
+        table[new_label] = aggregated_column
+
+    return table
+
+
+def test(table, label_1, label_2, strategy, axis=0):
+    """
+    Performs a specified statistical test between two rows or columns in the DataFrame.
+
+    Parameters:
+    - table: DataFrame on which the test will be performed.
+    - label_1: The label of the first row/column to be tested.
+    - label_2: The label of the second row/column to be tested.
+    - strategy: The statistical test to perform ('t-test', 'z-test', 'chi-squared').
+    - axis: 0 to test between columns, 1 to test between rows.
+    """
+
+    # Validate axis
+    if axis not in [0, 1]:
+        raise ValueError("Axis must be 0 or 1")
+
+    # Validate strategy
+    supported_strategies = ["t-test", "z-test", "chi-squared"]
+    if strategy not in supported_strategies:
+        raise ValueError(
+            f"Strategy '{strategy}' is not supported. Supported strategies are: {supported_strategies}"
+        )
+
+    # Perform the test between two columns
+    if axis == 0:
+        if label_1 not in table.columns or label_2 not in table.columns:
+            raise ValueError(
+                "One or both specified labels do not exist in the DataFrame's columns."
+            )
+
+        # Extract the data for each column
+        data_1 = table[label_1]
+        data_2 = table[label_2]
+
+    # Perform the test between two rows
+    else:
+        if label_1 not in table.index or label_2 not in table.index:
+            raise ValueError(
+                "One or both specified labels do not exist in the DataFrame's index."
+            )
+
+        # Extract the data for each row
+        data_1 = table.loc[label_1]
+        data_2 = table.loc[label_2]
+
+    # Perform a t-test
+    if strategy == "t-test":
+        test_stat, p_value = stats.ttest_ind(data_1, data_2)
+
+    # Perform a z-test
+    elif strategy == "z-test":
+        z_stat, p_value = sm.stats.ztest(data_1, data_2)
+
+    # Perform a chi-squared test
+    elif strategy == "chi-squared":
+        # For chi-squared test, we expect the data to be categorical and in a contingency table format
+        # Here we construct a contingency table from the two data sets
+        data_crosstab = pd.crosstab(data_1, data_2)
+        chi2_stat, p_value, dof, expected = stats.chi2_contingency(data_crosstab)
+
+        test_stat = chi2_stat
+
+    return test_stat, p_value
