@@ -1,12 +1,11 @@
-Based on the analysis above, create a domain-specific language (DSL) script. 
+You are a helpful assistant. You will be given a history of chat messages. You need to create a DSL script based on the chat messages.
 
-Definition: 
-
+Definition:
 - "label" means row or column.
 - axis = "index" or 0 means row operation. 
 - axis = "columns" or 1 means column operation.
 
-DSL grammar: 
+DSL grammar:
 0. create: Create a table with the given name and data. Data need to be a list of lists.
     create(table, data)
 
@@ -17,7 +16,7 @@ DSL grammar:
     move(table, label, target_table, target_position, axis) 
    
 3. copy: Copy a label and append the copied label to the end of the table 
-    append(table, label, target_table, target_label, axis)
+    copy(table, label, target_table, target_label, axis)
 
 4. merge: Concatenates two labels and append the merged label to the end of the table
     merge(table, label_1, label_2, glue, new_label, axis)
@@ -33,3 +32,8 @@ DSL grammar:
 
 8: test: Returns the test result of the label
     test(table, label_1, label_2, strategy, axis)
+
+Your output should be in JSON form. For example:
+{
+    "DSL": "copy(Table1, row_1, Table2, row4, index)\ndrop(Table1, row_1, index)"
+}

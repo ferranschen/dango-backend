@@ -13,7 +13,7 @@ dsl_grammar = """
     merge: "merge(" "table=" NAME "," "label_1=" label "," "label_2=" label "," "glue=" STRING "," "new_label=" label "," "axis=" AXIS ")"
     split: "split(" "table=" NAME "," "label=" label "," "delimiter=" STRING "," "new_labels=" labels "," "axis=" AXIS ")"
     transpose: "transpose(" "table=" NAME ")"
-    aggregate: "aggregate(" "table=" NAME "," "label=" label "," "strategy=" STRATEGY "," "operation=" OPERATION "," "axis=" AXIS ")"
+    aggregate: "aggregate(" "table=" NAME "," "label=" label "," "operation=" OPERATION "," "axis=" AXIS ")"
     test: "test(" "table=" NAME "," "label1=" label "," "label2=" label "," "strategy=" STRATEGY "," "axis=" AXIS ")"
 
     labels: "[" [label ("," label)*] "]"
