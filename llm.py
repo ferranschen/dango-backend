@@ -1,9 +1,12 @@
 import os
 from openai import OpenAI
 
+
 class OpenAIClient:
     history = []
-    def __init__(self, api_key=None):
+
+    def __init__(self, client_id, api_key=None):
+        self.client_id = client_id
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
 
     def generate_chat_completion(self, messages, model="gpt-3.5-turbo"):
@@ -11,6 +14,9 @@ class OpenAIClient:
 
     def clear_history(self):
         self.history = []
+
+    def append_system_message(self, message):
+        self.history.append({"role": "system", "content": message})
 
     def append_user_message(self, message):
         self.history.append({"role": "user", "content": message})

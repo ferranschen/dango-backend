@@ -1,34 +1,30 @@
 from lark import Lark, Transformer, Tree
-import pandas as pd
+import utils
 
-# Define the temporary table for testing
-table1 = pd.DataFrame(
-    {
-        "col1": [1, 2, 3, 4, 5],
-        "col2": [6, 7, 8, 9, 10],
-        "col3": [11, 12, 13, 14, 15],
-    }
-)
-
-# Define a dictionary to map table names to DataFrame objects
-tables = {"table1": table1}
 
 # Define the grammar for the DSL
 # LABELS menas index or column labels
 dsl_grammar = """
     start: command+
-    command: drop | split | move
-    drop: "drop(" "table=" NAME "," "labels=" labels "," "axis=" AXIS ")"
-    move: "move(" "table=" NAME "," "from=" NUMBER "," "to=" NUMBER ")"
-    split: "split(" [args] ")"
-    args: [arg ("," arg)*]
-    arg: NAME "=" (NAME | NUMBER)
+    command: drop | move | copy | merge | split | transpose | aggregate | test
+    drop: "drop(" "table=" NAME "," "label=" label "," "axis=" AXIS ")"
+    move: "move(" "table=" NAME "," "label=" label "," "target_table=" NAME "," "target_position=" NUMBER "," "axis=" AXIS ")"
+    copy: "copy(" "table=" NAME "," "label=" label "," "target_table=" NAME "," "target_label=" NUMBER "," "axis=" AXIS ")"
+    merge: "merge(" "table=" NAME "," "label_1=" label "," "label_2=" label "," "glue=" STRING "," "new_label=" label "," "axis=" AXIS ")"
+    split: "split(" "table=" NAME "," "label=" label "," "delimiter=" STRING "," "new_labels=" labels "," "axis=" AXIS ")"
+    transpose: "transpose(" "table=" NAME ")"
+    aggregate: "aggregate(" "table=" NAME "," "label=" label "," "operation=" OPERATION "," "axis=" AXIS ")"
+    test: "test(" "table=" NAME "," "label1=" label "," "label2=" label "," "strategy=" STRATEGY "," "axis=" AXIS ")"
 
     labels: "[" [label ("," label)*] "]"
     label: NAME | NUMBER
 
     NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
-    AXIS: "0" | "1"
+    AXIS: "0" | "1" | "index" | "columns"
+    STRING : /"[^"]*"/
+    OPERATION: "sum" | "mean" | "median" | "min" | "max"
+    STRATEGY: "t-test" | "z-test" | "chi-squared"
+
     %import common.NUMBER
     %import common.WS
     %ignore WS
@@ -37,60 +33,153 @@ dsl_grammar = """
 
 class DSLTransformer(Transformer):
     def drop(self, args):
-        return {"drop": {"table": args[0], "labels": args[1], "axis": args[2]}}
+        return {"drop": {"table": args[0], "label": args[1], "axis": args[2]}}
+
+    def move(self, args):
+        return {
+            "move": {
+                "table": args[0],
+                "label": args[1],
+                "target_table": args[2],
+                "target_position": args[3],
+                "axis": args[4],
+            }
+        }
+
+    def copy(self, args):
+        return {
+            "copy": {
+                "table": args[0],
+                "label": args[1],
+                "target_table": args[2],
+                "target_label": args[3],
+                "axis": args[4],
+            }
+        }
+
+    def merge(self, args):
+        return {
+            "merge": {
+                "table": args[0],
+                "label1": args[1],
+                "label2": args[2],
+                "glue": args[3],
+                "new_label": args[4],
+                "axis": args[5],
+            }
+        }
 
     def split(self, args):
-        # Implement the logic for split here
-        return {"split": args}
+        return {
+            "split": {
+                "table": args[0],
+                "label": args[1],
+                "delimiter": args[2],
+                "new_labels": args[3],
+                "axis": args[4],
+            }
+        }
 
-    def arg(self, args):
-        return {args[0]: args[1]}
+    def transpose(self, args):
+        return {"transpose": {"table": args[0]}}
 
-    def labels(self, args):
-        # Convert the list of label Trees into a list of label values
-        return [label.children[0].value for label in args]
+    def aggregate(self, args):
+        return {
+            "aggregate": {
+                "table": args[0],
+                "label": args[1],
+                "strategy": args[2],
+                "operation": args[3],
+                "axis": args[4],
+            }
+        }
+
+    def test(self, args):
+        return {
+            "test": {
+                "table": args[0],
+                "label1": args[1],
+                "label2": args[2],
+                "strategy": args[3],
+                "axis": args[4],
+            }
+        }
 
 
 # Initialize Lark with the grammar
 dsl_parser = Lark(dsl_grammar, parser="lalr", transformer=DSLTransformer())
 
+def convert_axis(token):
+    if token.value.isdigit():
+        return int(token.value)
+    elif token.value in ['index', 'columns']:
+        return token.value
+    else:
+        raise ValueError(f"Unexpected token value: {token.value}")
+
 
 # Function to parse and execute commands
-def execute_dsl(dsl_code):
+def execute_dsl(tables, dsl_code):
     parsed = dsl_parser.parse(dsl_code)
     # print(parsed.pretty())  # This line prints the parsed tree in a readable format.
 
     for command in parsed.children:
-        print("Executing command:", command)
+        # print("Executing command:", command)
         if isinstance(command, Tree):
             command = command.children[0]
-            if "drop" in command:
-                table_name = command["drop"]["table"]
-                labels = command["drop"]["labels"]
-                axis = int(command["drop"]["axis"])
-                # if the labels does not exist in the table's columns, then skip
-                if (not set(labels).issubset(tables[table_name].columns)) and axis == 1:
-                    print("Invalid column's labels:", labels)
-                    continue
-                if axis == 0:
-                    labels = [int(label) for label in labels]
-                    if not set(labels).issubset(tables[table_name].index):
-                        print("Invalid index labels:", labels)
-                        continue
-                table = tables[table_name]
-                table.drop(labels=labels, axis=axis, inplace=True)
-                print("Table after drop:\n", table)
+            command_type = list(command.keys())[0]
 
+            table_name = command[command_type]["table"]
+            table = tables[table_name]
+
+            if command_type == "drop":
+                label = command["drop"]["label"].children[0].value
+                axis = convert_axis(command["drop"]["axis"])
+                table = utils.drop(table, label, axis)
+            elif command_type == "move":
+                label = command["move"]["label"].children[0].value
+                target_table = command["move"]["target_table"]
+                target_position = command["move"]["target_position"].value
+                axis = convert_axis(command["move"]["axis"])
+                table, tables[target_table] = utils.move(
+                    table, label, tables[target_table], target_position, axis
+                )
+            elif command_type == "copy":
+                label = command["copy"]["label"]
+                target_table = command["copy"]["target_table"]
+                target_label = command["copy"]["target_label"]
+                axis = convert_axis(command["copy"]["axis"])
+                table = utils.copy(
+                    table, label, tables[target_table], target_label, axis
+                )
+            elif command_type == "merge":
+                label1 = command["merge"]["label1"]
+                label2 = command["merge"]["label2"]
+                glue = command["merge"]["glue"]
+                new_label = command["merge"]["new_label"]
+                axis = convert_axis(command["merge"]["axis"])
+                table = utils.merge(table, label1, label2, glue, new_label, axis)
+            elif command_type == "split":
+                label = command["split"]["label"]
+                delimiter = command["split"]["delimiter"]
+                new_labels = command["split"]["new_labels"]
+                axis = convert_axis(command["split"]["axis"])
+                table = utils.split(table, label, delimiter, new_labels, axis)
+            elif command_type == "transpose":
+                table = utils.transpose(table)
+            elif command_type == "aggregate":
+                label = command["aggregate"]["label"]
+                strategy = command["aggregate"]["strategy"]
+                operation = command["aggregate"]["operation"]
+                axis = convert_axis(command["aggregate"]["axis"])
+                table = utils.aggregate(table, label, strategy, operation, axis)
+            elif command_type == "test":
+                label1 = command["test"]["label1"]
+                label2 = command["test"]["label2"]
+                strategy = command["test"]["strategy"]
+                axis = convert_axis(command["test"]["axis"])
+                table = utils.test(table, label1, label2, strategy, axis)
         else:
             print("Invalid command:", command)
-
-
-# Test the interpreter
-dsl_code_1 = """
-    drop(table=table1, labels=[col1, col2], axis=1)
-"""
-
-dsl_code_2 = """
-    drop(table=table1, labels=[1, 2], axis=0)
-"""
-execute_dsl(dsl_code_1)
+        
+        return tables
