@@ -12,16 +12,24 @@ source venv/bin/activate
 
 ## Install dependencies
 ```
-pip install openai
-pip install fastapi
-pip install uvicorn
-pip install lark
-pip install pandas
+pip install -r requirements.txt
 ```
 
 ## Set the openai api key
 ```
 export OPENAI_API_KEY=your-api-key
+```
+
+## Install SQLite
+```
+# Update the package list
+sudo apt update
+
+# Install SQLite
+sudo apt install sqlite3
+
+# Check the installation
+sqlite3 --version
 ```
 
 ## Run the server
